@@ -1,12 +1,57 @@
 import collections
-import itertools
-import numpy as np
+import json
+import os
+import pathlib
 import random
+
+import numpy as np
+from numpyencoder import NumpyEncoder
+
+import lm_eval.base
 import lm_eval.metrics
 import lm_eval.models
 import lm_eval.tasks
-import lm_eval.base
 from lm_eval.utils import positional_deprecated, run_task_tests
+
+LABELS = {
+    "jnli": {
+        0: "entailment",
+        1: "contradiction",
+        2: "neutral"
+    },
+    "marc": {
+        0: "positive", 1: "negative"
+    },
+}
+
+
+def set_converter(task_name):
+    if "marc" in task_name:
+        return LABELS["marc"]
+    elif "nli" in task_name:
+        return LABELS["jnli"]
+    else:
+        return {}
+
+
+def get_setting(task_name, doc):
+    if "commonsense" in task_name:
+        return {
+            "question": doc["goal"],
+            "choices": {idx: label for idx, label in enumerate(doc["choices"])}
+        }
+    elif "jsquad" in task_name:
+        return {
+            "context": doc["context"],
+            "question": doc["question"]
+        }
+    elif "marc" in task_name:
+        return {"query": doc["query"]}
+    elif "jnli" in task_name:
+        return {
+            "premise": doc["premise"],
+            "hypothesis": doc["hypothesis"]
+        }
 
 
 @positional_deprecated
@@ -24,6 +69,7 @@ def simple_evaluate(
     check_integrity=False,
     decontamination_ngrams_path=None,
     verbose=False,
+    write_prediction=False,
 ):
 
     """Instantiate and evaluate a model on a list of tasks.
@@ -93,6 +139,7 @@ def simple_evaluate(
         description_dict=description_dict,
         decontamination_ngrams_path=decontamination_ngrams_path,
         verbose=verbose,
+        write_prediction=write_prediction,
     )
 
     # add info about the model and few shot config
@@ -125,6 +172,7 @@ def evaluate(
     description_dict=None,
     decontamination_ngrams_path=None,
     verbose=False,
+    write_prediction=False,
 ):
     """Instantiate and evaluate a model on a list of tasks.
 
@@ -188,7 +236,7 @@ def evaluate(
 
     # TODO: we need unit tests & sanity checks or something to ensure that the return of `validation_docs` is stable
     docs = {}
-
+    outputs = {}
     docs_for_decontamination = collections.defaultdict(list)
 
     # get lists of each type of request
@@ -211,6 +259,8 @@ def evaluate(
         rnd.seed(42)
         rnd.shuffle(task_docs)
 
+        if write_prediction:
+            outputs.update({task_name: {}})
         description = (
             description_dict[task_name]
             if description_dict and task_name in description_dict
@@ -242,6 +292,9 @@ def evaluate(
                 doc=doc, num_fewshot=num_fewshot[idx], rnd=rnd, description=description
             )
             reqs = task.construct_requests(doc, ctx)
+
+            if write_prediction:
+                outputs[task_name][doc_id] = {}
             if not isinstance(reqs, (list, tuple)):
                 reqs = [reqs]
             for i, req in enumerate(reqs):
@@ -249,6 +302,10 @@ def evaluate(
                 # i: index in requests for a single task instance
                 # doc_id: unique id that we can get back to a doc using `docs`
                 requests_origin[req.request_type].append((i, task_name, doc, doc_id))
+                if write_prediction:
+                    outputs[task_name][doc_id][f"prompt_{i}"] = "".join(map(str, list(req.args)))
+            if write_prediction:
+                outputs[task_name][doc_id].update(get_setting(task_name, doc))
 
     # Compare all tasks/sets at once to ensure a single training set scan
     if decontaminate:
@@ -277,6 +334,9 @@ def evaluate(
 
         for resp, (i, task_name, doc, doc_id) in zip(resps, requests_origin[reqtype]):
             process_res_queue[(task_name, doc_id)].append((i, resp))
+            if write_prediction:
+                gold = doc["gold"] if not task_name.startswith("jsquad") else doc["answers"]
+                outputs[task_name][doc_id]["gold"] = gold
 
     vals = collections.defaultdict(list)
     # holds detailed responses for error analysis
@@ -286,6 +346,29 @@ def evaluate(
     for (task_name, doc_id), requests in process_res_queue.items():
         requests.sort(key=lambda x: x[0])
         requests = [x[1] for x in requests]
+        if write_prediction:
+            gold = outputs[task_name][doc_id]["gold"]
+
+            if "commonsense" in task_name:
+                label_converter = outputs[task_name][doc_id]["choices"]
+            else:
+                label_converter = set_converter(task_name)
+
+            if "squad" not in task_name:
+                top1_prediction = np.argmax(requests)
+                outputs[task_name][doc_id].update({
+                    "prediction": {
+                        "value": label_converter.get(top1_prediction, str(top1_prediction)),
+                        "logits": {label_converter.get(int(i), str(i)): r for i, r in enumerate(requests)},
+                    },
+                    "gold": label_converter.get(gold, gold)
+                })
+
+            else:
+                outputs[task_name][doc_id].update({
+                    "prediction": requests,
+                    "gold": gold
+                })
 
         task = task_dict[task_name]
         doc = docs[(task_name, doc_id)]
@@ -327,6 +410,29 @@ def evaluate(
 
         if verbose and task_name in details:
             results[task_name]["details"] = details[task_name]
+
+        if write_prediction:
+            output_dir = pathlib.Path("model_predictions")
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+
+            for idx, (task_name, _) in enumerate(task_dict_items):
+                model_name = model_args.replace("=", "_")
+                fname = output_dir.joinpath(f"{model_name}___{task_name}___limit_{limit[idx]}.json")
+
+                print(f"Writing to {fname}")
+                with open(fname, "w", encoding="utf8") as f_out:
+                    json.dump(
+                        {
+                            "task": task_name,
+                            "model_args": model_args,
+                            "evaluation_setting": {
+                                "num_fewshot": num_fewshot[idx],
+                                "limit_local": limit[idx],
+                            },
+                            "prediction": outputs[task_name]
+                        },
+                        f_out, indent=1, ensure_ascii=False, cls=NumpyEncoder)
 
     return {"results": dict(results), "versions": dict(versions)}
 
