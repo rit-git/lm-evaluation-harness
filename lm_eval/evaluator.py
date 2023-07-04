@@ -420,28 +420,52 @@ def evaluate(
         if verbose and task_name in details:
             results[task_name]["details"] = details[task_name]
 
-        if write_prediction:
-            output_dir = pathlib.Path("model_predictions")
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
+    if write_prediction:
+        output_dir = pathlib.Path("model_predictions")
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
 
-            for idx, (task_name, _) in enumerate(task_dict_items):
-                model_name = model_args.replace("=", "_")
-                fname = output_dir.joinpath(f"{model_name}___{task_name}___limit_{limit[idx]}.json")
+        confusion_matrice = {}
+        for idx, (task_name, _) in enumerate(task_dict_items):
+            task_type = [i.__name__ for i in _.__class__.__mro__]
+            if "MultipleChoiceTask" in task_type:
+                from sklearn.metrics import confusion_matrix
+                d = {k: v for k, v in process_res_queue.items() if k[0] == task_name}
+                golds, preds = [], []
+                for (task_name, doc_id), requests in d.items():
+                    golds.append(docs[(task_name, doc_id)]["gold"])
+                    preds.append(np.argmax(results))
+                confusion_matrice[task_name] = confusion_matrix(golds, preds)
 
-                print(f"Writing to {fname}")
-                with open(fname, "w", encoding="utf8") as f_out:
-                    json.dump(
-                        {
-                            "task": task_name,
-                            "model_args": model_args,
-                            "evaluation_setting": {
-                                "num_fewshot": num_fewshot[idx],
-                                "limit_local": limit[idx],
-                            },
-                            "prediction": outputs[task_name]
-                        },
-                        f_out, indent=1, ensure_ascii=False, cls=NumpyEncoder)
+            model_name = model_args.replace("=", "_")
+            fname = output_dir.joinpath(f"{model_name}___{task_name}___limit_{limit[idx]}.json")
+
+            print(f"Writing to {fname}")
+            with open(fname, "w", encoding="utf8") as f_out:
+                toplevel_info = {
+                    "task": task_name,
+                    "model_args": model_args,
+                }
+                setting = {
+                    "evaluation_setting": {
+                        "num_fewshot": num_fewshot[idx],
+                        "limit_local": limit[idx],
+                    }
+                }
+                prediction = {"prediction": outputs[task_name]}
+
+                if task_name in confusion_matrice.keys():
+                    result = {
+                        "evaluation_result": {
+                            "confusion_matrix": confusion_matrice[task_name],
+                            "label_info": set_converter(task_name),
+                        }
+                    }
+                    output_dict = toplevel_info | setting | result | prediction
+                else:
+                    output_dict = toplevel_info | setting | prediction
+
+                json.dump(output_dict, f_out, indent=1, ensure_ascii=False, cls=NumpyEncoder)
 
     return {"results": dict(results), "versions": dict(versions)}
 
