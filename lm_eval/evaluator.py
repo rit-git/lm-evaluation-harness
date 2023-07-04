@@ -280,8 +280,14 @@ def evaluate(
         if isinstance(limit_local, float):
             limit_local = int(limit_local * len(task_docs))
             print(f"Use {limit_local}/{len(task_docs)} samples corresponding to the ratio of {limit[idx]}")
-        for doc_id, doc in enumerate(itertools.islice(task_docs, 0, limit_local)):
 
+        if limit_local < len(task_docs):
+            doc_id_list = random.sample([_ for _ in range(len(task_docs))], limit_local)
+        else:
+            doc_id_list = [_ for _ in range(len(task_docs))]
+
+        for doc_id in doc_id_list:
+            doc = task_docs[doc_id]
             if decontaminate and task.should_decontaminate():
                 docs_for_decontamination[(task_name, task_set)].append(
                     task.doc_to_decontamination_query(doc)

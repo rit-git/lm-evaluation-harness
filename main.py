@@ -81,6 +81,8 @@ def main():
     if args.limit is not None:
         if "," in args.limit:
             limit = [int(n) if n.isdigit() else float(n) for n in args.limit.split(",")]
+        elif "." in args.limit:
+            limit = float(args.limit)
         else:
             limit = int(args.limit)
     else:
