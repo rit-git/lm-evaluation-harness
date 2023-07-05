@@ -13,7 +13,7 @@ else
   TEMPLATE=0.2
 fi
 if [ $# -ge 4 ]; then
-  NUM_FEWSHOT=$5
+  NUM_FEWSHOT=$4
 else
   NUM_FEWSHOT=3
 fi
@@ -31,4 +31,5 @@ python main.py \
     --num_fewshot $NUM_FEWSHOT \
     --device "cuda" \
     --limit $LIMIT \
-    --output_path "${MODEL//\//--}-$TASK.json"
+    --output_path "./${MODEL//\//--}-$TASK.json" \
+    --write_prediction
