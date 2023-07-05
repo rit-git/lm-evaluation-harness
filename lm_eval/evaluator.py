@@ -438,7 +438,7 @@ def evaluate(
                 confusion_matrice[task_name] = confusion_matrix(golds, preds)
 
             model_name = model_args.replace("=", "_")
-            fname = output_dir.joinpath(f"{model_name}___{task_name}___limit_{limit[idx]}.json")
+            fname = output_dir.joinpath(f"{model_name}___{task_name}___{num_fewshot[idx]}-shot___limit_{limit[idx]}.json")
 
             print(f"Writing to {fname}")
             with open(fname, "w", encoding="utf8") as f_out:
