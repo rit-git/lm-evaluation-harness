@@ -451,7 +451,7 @@ def evaluate(
                 for (_, doc_id), requests in process_res_queue.items():
                     if _ == task_name:
                         golds.append(docs[(task_name, doc_id)]["gold"])
-                        preds.append(np.argmax([_[1] for _ in requests]))
+                        preds.append(np.argmax([_[1] for _ in requests]))  # requests: list[(class, score)]
 
                 confusion_matrice[task_name] = confusion_matrix_to_dict(golds, preds,
                                                                         list(set_converter(task_name).values()))
