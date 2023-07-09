@@ -54,6 +54,24 @@ def get_setting(task_name, doc):
         }
 
 
+def confusion_matrix_to_dict(golds, preds, labels):
+    from sklearn.metrics import confusion_matrix
+
+    matrix = confusion_matrix(golds, preds, labels=[_ for _ in range(len(labels))])
+
+    if not labels:  # JCQA
+        labels = [f"Choice-{_}" for _ in range(len(matrix))]
+
+    result = {}
+    num_classes = len(labels)
+    for i in range(num_classes):
+        class_name = labels[i]
+        class_values = matrix[i]
+        result[f"True {class_name}"] = {f"Pred {labels[j]}": class_values[j] for j in range(num_classes)}
+
+    return result
+
+
 @positional_deprecated
 def simple_evaluate(
         model,
@@ -429,13 +447,14 @@ def evaluate(
         for idx, (task_name, _) in enumerate(task_dict_items):
             task_type = [i.__name__ for i in _.__class__.__mro__]
             if "MultipleChoiceTask" in task_type:
-                from sklearn.metrics import confusion_matrix
-                d = {k: v for k, v in process_res_queue.items() if k[0] == task_name}
                 golds, preds = [], []
-                for (task_name, doc_id), requests in d.items():
-                    golds.append(docs[(task_name, doc_id)]["gold"])
-                    preds.append(np.argmax(results))
-                confusion_matrice[task_name] = confusion_matrix(golds, preds)
+                for (_, doc_id), requests in process_res_queue.items():
+                    if _ == task_name:
+                        golds.append(docs[(task_name, doc_id)]["gold"])
+                        preds.append(np.argmax([_[1] for _ in requests]))
+
+                confusion_matrice[task_name] = confusion_matrix_to_dict(golds, preds,
+                                                                        list(set_converter(task_name).values()))
 
             model_name = model_args.replace("=", "_")
             fname = output_dir.joinpath(f"{model_name}___{task_name}___limit_{limit[idx]}.json")
