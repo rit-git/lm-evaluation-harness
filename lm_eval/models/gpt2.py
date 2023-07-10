@@ -15,7 +15,7 @@ class HFLM(BaseLM):
         tokenizer=None,
         batch_size=1,
         load_in_8bit: Optional[bool] = False,
-        trust_remote_code: Optional[bool] = False,
+        trust_remote_code: Optional[bool] = True,
         use_fast: Optional[bool] = True
     ):
         super().__init__()
@@ -44,10 +44,12 @@ class HFLM(BaseLM):
         self.gpt2 = transformers.AutoModelForCausalLM.from_pretrained(
             pretrained,
             load_in_8bit=load_in_8bit,
+            torch_dtype=torch.bfloat16,
             low_cpu_mem_usage=low_cpu_mem_usage,
             revision=revision,
             trust_remote_code=trust_remote_code,
-        ).to(self.device)
+            device_map="auto",
+        ) # .to(self.device)
         self.gpt2.eval()
         self.tokenizer = transformers.AutoTokenizer.from_pretrained(
             pretrained if tokenizer is None else tokenizer,
@@ -76,7 +78,12 @@ class HFLM(BaseLM):
             return self.gpt2.config.n_ctx
         except AttributeError:
             # gptneoconfig doesn't have n_ctx apparently
-            return self.gpt2.config.max_position_embeddings
+            # return self.gpt2.config.max_position_embeddings
+            try:
+                # gptneoconfig doesn't have n_ctx apparently
+                return self.gpt2.config.max_position_embeddings
+            except AttributeError:
+                return self.gpt2.config.max_seq_len
 
     @property
     def max_gen_toks(self):
