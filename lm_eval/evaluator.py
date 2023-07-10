@@ -257,7 +257,7 @@ def evaluate(
 
     # TODO: we need unit tests & sanity checks or something to ensure that the return of `validation_docs` is stable
     docs = {}
-    outputs = {}
+    output_json = {}
     docs_for_decontamination = collections.defaultdict(list)
 
     # get lists of each type of request
@@ -281,7 +281,7 @@ def evaluate(
         rnd.shuffle(task_docs)
 
         if write_prediction:
-            outputs.update({task_name: {}})
+            output_json.update({task_name: {}})
         description = (
             description_dict[task_name]
             if description_dict and task_name in description_dict
@@ -321,7 +321,7 @@ def evaluate(
             reqs = task.construct_requests(doc, ctx)
 
             if write_prediction:
-                outputs[task_name][doc_id] = {}
+                output_json[task_name][doc_id] = {}
             if not isinstance(reqs, (list, tuple)):
                 reqs = [reqs]
             for i, req in enumerate(reqs):
@@ -330,9 +330,9 @@ def evaluate(
                 # doc_id: unique id that we can get back to a doc using `docs`
                 requests_origin[req.request_type].append((i, task_name, doc, doc_id))
                 if write_prediction:
-                    outputs[task_name][doc_id][f"prompt_{i}"] = "".join(map(str, list(req.args)))
+                    output_json[task_name][doc_id][f"prompt_{i}"] = "".join(map(str, list(req.args)))
             if write_prediction:
-                outputs[task_name][doc_id].update(get_setting(task_name, doc))
+                output_json[task_name][doc_id].update(get_setting(task_name, doc))
 
     # Compare all tasks/sets at once to ensure a single training set scan
     if decontaminate:
@@ -363,7 +363,7 @@ def evaluate(
             process_res_queue[(task_name, doc_id)].append((i, resp))
             if write_prediction:
                 gold = doc["gold"] if not task_name.startswith("jsquad") else doc["answers"]
-                outputs[task_name][doc_id]["gold"] = gold
+                output_json[task_name][doc_id]["gold"] = gold
 
     vals = collections.defaultdict(list)
     # holds detailed responses for error analysis
@@ -374,16 +374,16 @@ def evaluate(
         requests.sort(key=lambda x: x[0])
         requests = [x[1] for x in requests]
         if write_prediction:
-            gold = outputs[task_name][doc_id]["gold"]
+            gold = output_json[task_name][doc_id]["gold"]
 
             if "commonsense" in task_name:
-                label_converter = outputs[task_name][doc_id]["choices"]
+                label_converter = output_json[task_name][doc_id]["choices"]
             else:
                 label_converter = set_converter(task_name)
 
             if "squad" not in task_name:
                 top1_prediction = np.argmax(requests)
-                outputs[task_name][doc_id].update({
+                output_json[task_name][doc_id].update({
                     "prediction": {
                         "value": label_converter.get(top1_prediction, str(top1_prediction)),
                         "logits": {label_converter.get(int(i), str(i)): r for i, r in enumerate(requests)},
@@ -392,7 +392,7 @@ def evaluate(
                 })
 
             else:
-                outputs[task_name][doc_id].update({
+                output_json[task_name][doc_id].update({
                     "prediction": requests,
                     "gold": gold
                 })
@@ -471,7 +471,7 @@ def evaluate(
                         "limit_local": limit[idx],
                     }
                 }
-                prediction = {"prediction": outputs[task_name]}
+                prediction = {"prediction": output_json[task_name]}
 
                 if task_name in confusion_matrice.keys():
                     result = {
