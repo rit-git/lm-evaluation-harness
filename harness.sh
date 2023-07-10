@@ -19,11 +19,11 @@ else
 fi
 TASK="$DATASET-1.1-$TEMPLATE"
 
-echo "python main.py \
+python main.py \
     --model hf-causal \
     --model_args $MODEL_ARGS \
     --tasks $TASK \
     --num_fewshot "3" \
     --device "cuda" \
     --limit $LIMIT \
-    --output_path "${MODEL//\//--}-$TASK.json""
+    --output_path "${MODEL//\//--}-$TASK.json"
