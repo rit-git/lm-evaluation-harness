@@ -459,31 +459,31 @@ def evaluate(
             model_name = model_args.replace("=", "").replace("/", "_").replace(".", "")
             fname = output_dir.joinpath(f"{model_name}___{task_name}___limit_{limit[idx]}.json")
 
+            toplevel_info = {
+                "task": task_name,
+                "model_args": model_args,
+            }
+            setting = {
+                "evaluation_setting": {
+                    "num_fewshot": num_fewshot[idx],
+                    "limit_local": limit[idx],
+                }
+            }
+            prediction = {"prediction": output_json[task_name]}
+
+            if task_name in confusion_matrice.keys():
+                result = {
+                    "evaluation_result": {
+                        "confusion_matrix": confusion_matrice[task_name],
+                        "label_info": set_converter(task_name),
+                    }
+                }
+                output_dict = toplevel_info | setting | result | prediction
+            else:
+                output_dict = toplevel_info | setting | prediction
+
             print(f"Writing to {fname}")
             with open(fname, "w", encoding="utf8") as f_out:
-                toplevel_info = {
-                    "task": task_name,
-                    "model_args": model_args,
-                }
-                setting = {
-                    "evaluation_setting": {
-                        "num_fewshot": num_fewshot[idx],
-                        "limit_local": limit[idx],
-                    }
-                }
-                prediction = {"prediction": output_json[task_name]}
-
-                if task_name in confusion_matrice.keys():
-                    result = {
-                        "evaluation_result": {
-                            "confusion_matrix": confusion_matrice[task_name],
-                            "label_info": set_converter(task_name),
-                        }
-                    }
-                    output_dict = toplevel_info | setting | result | prediction
-                else:
-                    output_dict = toplevel_info | setting | prediction
-
                 json.dump(output_dict, f_out, indent=1, ensure_ascii=False, cls=NumpyEncoder)
 
     return {"results": dict(results), "versions": dict(versions)}
