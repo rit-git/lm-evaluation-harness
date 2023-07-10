@@ -457,7 +457,7 @@ def evaluate(
                                                                         list(set_converter(task_name).values()))
 
             model_name = model_args.replace("=", "").replace("/", "_").replace(".", "")
-            fname = output_dir.joinpath(f"{model_name}___{task_name}___limit_{limit[idx]}.json")
+            fname = output_dir.joinpath(f"{model_name}___{task_name}___{num_fewshot[idx]}-shot___limit_{limit[idx]}.json")
 
             toplevel_info = {
                 "task": task_name,
