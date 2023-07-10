@@ -456,7 +456,7 @@ def evaluate(
                 confusion_matrice[task_name] = confusion_matrix_to_dict(golds, preds,
                                                                         list(set_converter(task_name).values()))
 
-            model_name = model_args.replace("=", "_")
+            model_name = model_args.replace("=", "_").replace("/", "_")
             fname = output_dir.joinpath(f"{model_name}___{task_name}___limit_{limit[idx]}.json")
 
             print(f"Writing to {fname}")
