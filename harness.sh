@@ -1,7 +1,7 @@
 #!/bin/bash
 
 MODEL=$1
-MODEL_ARGS="pretrained=$MODEL"
+MODEL_ARGS="pretrained=../models/$MODEL"
 if [ $# -ge 2 ]; then
   DATASET=$2
 else
@@ -26,4 +26,5 @@ python main.py \
     --num_fewshot "3" \
     --device "cuda" \
     --limit $LIMIT \
-    --output_path "${MODEL//\//--}-$TASK.json"
+    --output_path "$MODEL-$TASK.json" \
+    --write_prediction
